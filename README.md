@@ -6,10 +6,10 @@ The yaml files can be found in the respective folders. Some require more context
 So I created a cloudformation template to manually set up a simple kubernetes cluster on 3 ubuntu vm's( one master and two worker nodes) in a custom vpc with subnet &n internet gateway. The config was done using userdata ofcourse you will need to add the worker nodes manually.
 
 
-![Photo](/aws/thenotsohardway.png)
+![Photo](https://github.com/goekezie/CloudArchitecture/blob/main/AWS/thenotsohardway.png)
 
 # Steps to set a kubernetes cluster
-These are just series of commands that can be found on the [kubernetes documentation page](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/){:target="_blank"}
+These are just series of commands that can be found on the [kubernetes documentation page](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/)
 * Letting iptable see bridged traffic
 * Installing container runtime(docker)
 * Configure the Docker daemon to use systemd for the management
