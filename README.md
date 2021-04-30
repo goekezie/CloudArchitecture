@@ -8,7 +8,7 @@ I created a cloudformation template to manually set up a simple kubernetes clust
 
 ![Photo](https://github.com/goekezie/CloudArchitecture/blob/main/AWS/thenotsohardway.png)
 
-# Steps to set a kubernetes cluster
+# Steps to set up a kubernetes cluster
 These are just series of commands that can be found on the [kubernetes documentation page](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/)
 * Letting iptable see bridged traffic
 * Installing container runtime(docker)
