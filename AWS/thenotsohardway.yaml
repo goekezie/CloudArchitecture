@@ -1,0 +1,287 @@
+---
+Parameters:
+  SSHKey:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+
+Resources:
+#vpc
+  clusterVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.244.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      InstanceTenancy: default
+      Tags:
+      - Key: stack
+        Value: kubernetes
+  #vpc subnet      
+  clusterSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: clusterVPC
+      CidrBlock: 10.244.16.0/20
+      AvailabilityZone: "us-east-1a"
+      Tags:
+      - Key: stack
+        Value: kubernetes
+  #internetgateway
+  clusterInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: stack
+        Value: kubernetes
+  #attachGateway
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: clusterVPC
+      InternetGatewayId:
+        Ref: clusterInternetGateway
+  #routetable
+  clusterRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:  
+        Ref: clusterVPC
+      Tags:
+      - Key: stack
+        Value: kubernetes
+  #Route
+  clusterRoute:
+    Type: AWS::EC2::Route
+    DependsOn: clusterInternetGateway
+    Properties:
+       RouteTableId:
+         Ref: clusterRouteTable
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId:
+         Ref: clusterInternetGateway
+  #subnetRoutetableAssociation
+  clusterSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: clusterSubnet
+      RouteTableId:
+        Ref: clusterRouteTable
+
+  kubemaster:
+    Type: AWS::EC2::Instance
+    Properties:
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          SubnetId: 
+            Ref: "clusterSubnet"
+          DeviceIndex: '0'
+          PrivateIpAddress: "10.244.16.69"
+          DeleteOnTermination: 'true'
+          GroupSet: 
+            - Ref: "nodeSecurityGroup"
+      AvailabilityZone: us-east-1a
+      ImageId: ami-042e8287309f5df03 
+      InstanceType: t2.medium
+      KeyName: !Ref SSHKey
+      
+      # SecurityGroups:
+      #   - !Ref nodeSecurityGroup
+      # we install our web server with user data
+      UserData: 
+        Fn::Base64: |
+            #!/bin/bash -xe
+            #letting iptables see bridged traffic
+            cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+            br_netfilter
+            EOF
+
+            cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+            net.bridge.bridge-nf-call-ip6tables = 1
+            net.bridge.bridge-nf-call-iptables = 1
+            EOF
+            #sudo sysctl --system
+
+            #installing container runtime
+            sudo apt-get -y update && sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null            
+            sudo apt-get -y update && sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
+            #Configure the Docker daemon to use systemd for the management
+            curl https://theformer.s3.amazonaws.com/daemon.json >> /etc/docker/daemon.json           
+            sudo systemctl enable docker && sudo systemctl daemon-reload && sudo systemctl restart docker
+
+            #installing kubeadm, kubelet and kubectl
+            sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg 
+            echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+            sudo apt-get -y update && sudo apt-get install -y kubelet kubeadm kubectl && sudo apt-mark hold kubelet kubeadm kubectl
+
+            #setting up cluster with kubeadm
+            kubeadm init --pod-network-cidr 10.244.16.0/24 --apiserver-advertise-address=10.244.16.69
+            mkdir -p $HOME/.kube
+            sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+            sudo chown $(id -u):$(id -g) $HOME/.kube/config         
+            kubeadm token create --print-join-command > join.txt
+
+            #network Addon "weave"
+            kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"            
+      Tags: 
+        - Key: "Name"
+          Value: "Kubemaster"
+
+  kubenode01:
+    Type: AWS::EC2::Instance
+    Properties:
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          SubnetId: 
+            Ref: "clusterSubnet"
+          DeviceIndex: '0'
+          DeleteOnTermination: 'true'
+          GroupSet: 
+            - Ref: "nodeSecurityGroup"
+      AvailabilityZone: us-east-1a
+      ImageId: ami-042e8287309f5df03 
+      InstanceType: t2.micro
+      KeyName: !Ref SSHKey
+      # SecurityGroups:
+      #   - !Ref nodeSecurityGroup
+      # we install our web server with user data
+      UserData: 
+        Fn::Base64: |
+            #!/bin/bash -xe
+            #letting iptables see bridged traffic
+            cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+            br_netfilter
+            EOF
+
+            cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+            net.bridge.bridge-nf-call-ip6tables = 1
+            net.bridge.bridge-nf-call-iptables = 1
+            EOF
+            #sudo sysctl --system
+
+            #installing container runtime
+            sudo apt-get -y update && sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null            
+            sudo apt-get -y update && sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
+            #Configure the Docker daemon to use systemd for the management
+            curl https://theformer.s3.amazonaws.com/daemon.json >> /etc/docker/daemon.json
+
+            sudo systemctl enable docker && sudo systemctl daemon-reload && sudo systemctl restart docker
+            
+            #installing kubeadm, kubelet and kubectl
+            sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg 
+            echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+            sudo apt-get -y update && sudo apt-get install -y kubelet kubeadm kubectl && sudo apt-mark hold kubelet kubeadm kubectl 
+      Tags: 
+        - Key: "Name"
+          Value: "Kubenode01"
+
+  kubenode02:
+    Type: AWS::EC2::Instance
+    Properties:
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          SubnetId: 
+            Ref: "clusterSubnet"
+          DeviceIndex: '0'
+          DeleteOnTermination: 'true'
+          GroupSet: 
+            - Ref: "nodeSecurityGroup"
+      AvailabilityZone: us-east-1a
+      ImageId: ami-042e8287309f5df03 
+      InstanceType: t2.micro
+      KeyName: !Ref SSHKey
+      
+      # SecurityGroups:
+      #   - !Ref nodeSecurityGroup
+      # we install our web server with user data
+      UserData: 
+        Fn::Base64: |
+            #!/bin/bash -xe
+            #letting iptables see bridged traffic
+            cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+            br_netfilter
+            EOF
+
+            cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+            net.bridge.bridge-nf-call-ip6tables = 1
+            net.bridge.bridge-nf-call-iptables = 1
+            EOF
+            #sudo sysctl --system
+
+            #installing container runtime
+            sudo apt-get -y update && sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null            
+            sudo apt-get -y update && sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
+            #Configure the Docker daemon to use systemd for the management
+            curl https://theformer.s3.amazonaws.com/daemon.json >> /etc/docker/daemon.json
+            sudo systemctl enable docker && sudo systemctl daemon-reload && sudo systemctl restart docker
+            
+            #installing kubeadm, kubelet and kubectl
+            sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg 
+            echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+            sudo apt-get -y update && sudo apt-get install -y kubelet kubeadm kubectl && sudo apt-mark hold kubelet kubeadm kubectl                
+      Tags: 
+        - Key: "Name"
+          Value: "Kubenode02"
+  # kubenode security group
+  nodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SSH, HTTP, Kubernetes API server, etcd server client API & kubelet API
+      VpcId:
+         Ref: clusterVPC
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+      - CidrIp: 0.0.0.0/0
+        FromPort: 80
+        IpProtocol: tcp
+        ToPort: 80
+      - CidrIp: 0.0.0.0/0
+        FromPort: 6443
+        IpProtocol: tcp
+        ToPort: 6443
+      - CidrIp: 0.0.0.0/0
+        FromPort: 2379
+        IpProtocol: tcp
+        ToPort: 2379
+      - CidrIp: 0.0.0.0/0
+        FromPort: 2380
+        IpProtocol: tcp
+        ToPort: 2380        
+      - CidrIp: 0.0.0.0/0
+        FromPort: 10250
+        IpProtocol: tcp
+        ToPort: 10250
+      - CidrIp: 0.0.0.0/0
+        FromPort: 30000
+        IpProtocol: tcp
+        ToPort: 30000
+      - CidrIp: 0.0.0.0/0
+        FromPort: 8080
+        IpProtocol: tcp
+        ToPort: 8080         
+      # - CidrIp: 0.0.0.0/0
+      #   FromPort: 30000-32767
+      #   IpProtocol: tcp
+      #   ToPort: 30000-32767                                        
+  # Outputs:
+  #   BackupLoadBalancerDNSName:
+  #     Description: The DNSName of the backup load balancer
+  #     Value: !GetAtt BackupLoadBalancer.DNSName
+  #     Condition: CreateProdResources
+  #   InstanceID:
+  #     Description: The Instance ID
+  #     Value: !Ref EC2Instance
