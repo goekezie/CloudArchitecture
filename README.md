@@ -18,4 +18,4 @@ These are just series of commands that can be found on the [kubernetes documenta
 * Setting up network Addon "weave"
 
 The first 4 steps should be carried out on all nodes while the final two steps should be carried out on just the master node.
-Ps I'm  still ahving a tough time troubleshooting some networking issues. You could also use a vagrant template to set this up on virtualbox tho you would have to run the commands manually checkout this repo [link to repo](https://github.com/goekezie/certified-kubernetes-administrator-course) 
+Ps I'm  still having a hard time troubleshooting some networking issues. You could also use a vagrant template to set this up on virtualbox tho you would have to run the commands manually checkout this repo [link to repo](https://github.com/goekezie/certified-kubernetes-administrator-course) 
