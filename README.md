@@ -2,7 +2,7 @@
 This repo contains environments I setup in the cloud (aws/azure) using automation tools like  terraform and cloudformation.
 The yaml files can be found in the respective folders. Some require more context like the ones below;
 
-## Kubernetes The Not SO Hard Way
+## Kubernetes The Not So Hard Way
 I created a cloudformation template to manually set up a simple kubernetes cluster on 3 ubuntu vm's( one master and two worker nodes) in a custom vpc with subnet &n internet gateway. The config was done using userdata ofcourse you will need to add the worker nodes manually.
 
 
