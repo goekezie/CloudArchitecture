@@ -3,7 +3,7 @@ This repo contains environments I setup in the cloud (aws/azure) using automatio
 The yaml files can be found in the respective folders. Some require more context like the ones below;
 
 ## Kubernetes The Not SO Hard Way
-So I created a cloudformation template to manually set up a simple kubernetes cluster on 3 ubuntu vm's( one master and two worker nodes) in a custom vpc with subnet &n internet gateway. The config was done using userdata ofcourse you will need to add the worker nodes manually.
+I created a cloudformation template to manually set up a simple kubernetes cluster on 3 ubuntu vm's( one master and two worker nodes) in a custom vpc with subnet &n internet gateway. The config was done using userdata ofcourse you will need to add the worker nodes manually.
 
 
 ![Photo](https://github.com/goekezie/CloudArchitecture/blob/main/AWS/thenotsohardway.png)
