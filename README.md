@@ -1,5 +1,5 @@
 # CloudArchitecture
-This repo contains environmrnts I setup in the cloud (aws/azure) using automation tools like  terraform and cloudformation.
+This repo contains environments I setup in the cloud (aws/azure) using automation tools like  terraform and cloudformation.
 The yaml files can be found in the respective folders. Some require more context like the ones below;
 
 ## Kubernetes The Not SO Hard Way
